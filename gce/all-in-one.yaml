@@ -1,0 +1,57 @@
+---
+- name: build-all-the-things
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    region: us-east1
+    zone: us-east1-c
+    subnet_cidr: 10.9.0.0/24
+    local_cidr: 0.0.0.0/0
+    machine_type: f1-micro
+    boot_image: debian-9
+    boot_disk_sizeGB: 10
+    resource_state: present
+  tasks:
+    - name: create-network-subnet
+      register: gce_net
+      gce_net:
+        name: ansible-network
+        mode: custom
+        subnet_name: ansible-subnet
+        subnet_region: "{{ region }}"
+        ipv4_range: "{{ subnet_cidr }}"
+        state: "{{ resource_state }}"
+    - name: create-ssh-firewall-rule
+      register: gce_fw
+      gce_net:
+        name: "{{ gce_net.name }}"
+        fwname: "{{ gce_net.name }}-allow-ssh"
+        allowed: tcp:22
+        src_range: ["{{ local_cidr }}"]
+        state: "{{ resource_state }}"
+    - name: provision-vm-instance
+      register: gce
+      gce:
+        name: ansible-instance
+        num_instances: 1
+        zone: "{{ zone }}"
+        network: "{{ gce_net.name }}"
+        subnetwork: "{{ gce_net.subnet_name }}"
+        external_ip: ephemeral
+        machine_type: "{{ machine_type }}"
+        image: "{{ boot_image }}"
+        disk_size: "{{ boot_disk_sizeGB }}"
+        persistent_boot_disk: true
+        disk_auto_delete: true
+        tags:
+          - ansible-instance
+        metadata:
+          items:
+          - key: startup-script
+            value: |
+              #!/usr/bin/env bash
+              echo "===== Update apt ====="
+              sudo apt-get update
+              apt-get install -q -y ansible
+        state: "{{ resource_state }}"

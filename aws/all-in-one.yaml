@@ -1,0 +1,115 @@
+---
+- name: build-all-the-things
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    project: ansible
+    region: us-east-1
+    vpc_cidr: 10.9.0.0/22
+    subnet1_zone: us-east-1a
+    subnet2_zone: us-east-1b
+    subnet1_cidr: 10.9.0.0/23
+    subnet2_cidr: 10.9.2.0/23
+    local_cidr: 0.0.0.0./0
+    instance_type: t2.micro
+    boot_image: ami-a4dc46db
+    boot_disk_sizeGB: 8
+    ssh_keypair: my-ssh-keypair
+  tasks:
+    - name: create-vpc
+      register: ec2_vpc
+      ec2_vpc_net:
+        name: "{{ project }}-vpc"
+        state: present
+        region: "{{ region }}"
+        cidr_block: "{{ vpc_cidr }}"
+        tags:
+          project: "{{ project }}"
+    - name: create-igw
+      register: ec2_igw
+      ec2_vpc_igw:
+        state: present
+        region: "{{ region }}"
+        vpc_id: "{{ ec2_vpc.vpc.id }}"
+        tags:
+          Name: "{{ project }}-igw"
+          project: "{{ project }}"
+    - name: create-subnet-1
+      register: ec2_vpc_subnet1
+      ec2_vpc_subnet:
+        state: present
+        region: "{{ region }}"
+        vpc_id: "{{ ec2_vpc.vpc.id }}"
+        cidr: "{{ subnet1_cidr }}"
+        az: "{{ subnet1_zone }}"
+        tags:
+          Name: "{{ project }}-subnet-1"
+          project: "{{ project }}"
+    - name: create-subnet-2
+      register: ec2_vpc_subnet2
+      ec2_vpc_subnet:
+        state: present
+        region: "{{ region }}"
+        vpc_id: "{{ ec2_vpc.vpc.id }}"
+        cidr: "{{ subnet2_cidr }}"
+        az: "{{ subnet2_zone }}"
+        tags:
+          Name: "{{ project }}-subnet-2"
+          project: "{{ project }}"
+    - name: create-route-tables
+      register: ec2_vpc_rt
+      ec2_vpc_route_table:
+        state: present
+        vpc_id: "{{ ec2_vpc.vpc.id }}"
+        region: "{{ region }}"
+        tags:
+          Name: "{{ project }}-public-subnet-rt"
+          project: "{{ project }}"
+        subnets:
+          - "{{ ec2_vpc_subnet1.subnet.id }}"
+          - "{{ ec2_vpc_subnet2.subnet.id }}"
+        routes:
+          - dest: 0.0.0.0/0
+            gateway_id: "{{ ec2_igw.gateway_id }}"
+    - name: create-security-group
+      register: ec2_sg
+      ec2_group:
+        state: present
+        name: "{{ project }}-public-sg"
+        description: "{{ project }} public zone security group"
+        vpc_id: "{{ ec2_vpc.vpc.id }}"
+        region: "{{ region }}"
+        tags:
+          Name: "{{ project }}-public-sg"
+          project: "{{ project }}"
+        rules:
+          - proto: -1
+            cidr_ip: "{{ vpc_cidr }}"
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: "{{ local_cidr }}"
+    - name: create-ec2-instance
+      register: ec2_inst
+      ec2:
+        state: present
+        instance_type: "{{ instance_type }}"
+        image: "{{ boot_image }}"
+        wait: yes
+        region: "{{ region }}"
+        vpc_subnet_id: "{{ ec2_vpc_subnet1.subnet.id }}"
+        assign_public_ip: yes
+        key_name: "{{ ssh_keypair }}"
+        instance_tags:
+          Name: "{{ project }}-instance-1"
+          project: "{{ project }}"
+        volumes:
+          - device_name: /dev/xvda
+            volume_type: gp2
+            volume_size: "{{ boot_disk_sizeGB }}"
+        group_id: "{{ ec2_sg.group_id }}"
+        user_data: |
+          #!/usr/bin/env bash
+          apt-get update
+          apt-get install -q -y ansible

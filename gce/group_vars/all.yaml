@@ -1,0 +1,9 @@
+---
+region: us-east1
+zone: us-east1-c
+subnet_cidr: 10.9.0.0/24
+local_cidr: 0.0.0.0/0
+machine_type: f1-micro
+boot_image: debian-9
+boot_disk_sizeGB: 10
+resource_state: present

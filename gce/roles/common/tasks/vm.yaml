@@ -1,0 +1,26 @@
+---
+  - name: provision-vm-instance
+    register: gce
+    gce:
+      name: ansible-instance
+      num_instances: 1
+      zone: "{{ zone }}"
+      network: "{{ gce_net.name }}"
+      subnetwork: "{{ gce_net.subnet_name }}"
+      external_ip: ephemeral
+      machine_type: "{{ machine_type }}"
+      image: "{{ boot_image }}"
+      disk_size: "{{ boot_disk_sizeGB }}"
+      persistent_boot_disk: true
+      disk_auto_delete: true
+      tags:
+        - ansible-instance
+      metadata:
+        items:
+        - key: startup-script
+          value: |
+            #!/usr/bin/env bash
+            echo "===== Update apt ====="
+            sudo apt-get update
+            apt-get install -q -y ansible
+      state: "{{ resource_state }}"

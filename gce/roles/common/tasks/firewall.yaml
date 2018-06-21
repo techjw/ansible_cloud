@@ -1,0 +1,9 @@
+---
+  - name: create-ssh-firewall-rule
+    register: gce_fw
+    gce_net:
+      name: "{{ gce_net.name }}"
+      fwname: "{{ gce_net.name }}-allow-ssh"
+      allowed: tcp:22
+      src_range: ["{{ local_cidr }}"]
+      state: "{{ resource_state }}"

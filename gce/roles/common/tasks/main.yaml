@@ -1,0 +1,4 @@
+---
+  - include_tasks: network.yaml
+  - include_tasks: firewall.yaml
+  - include_tasks: vm.yaml

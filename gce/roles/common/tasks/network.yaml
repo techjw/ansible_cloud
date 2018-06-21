@@ -1,0 +1,10 @@
+---
+  - name: create-network-subnet
+    register: gce_net
+    gce_net:
+      name: ansible-network
+      mode: custom
+      subnet_name: ansible-subnet
+      subnet_region: "{{ region }}"
+      ipv4_range: "{{ subnet_cidr }}"
+      state: "{{ resource_state }}"
