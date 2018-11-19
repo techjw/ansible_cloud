@@ -95,7 +95,7 @@
       ec2:
         state: present
         instance_type: "{{ instance_type }}"
-        image: "{{ boot_image }}"
+        image_id: "{{ boot_image }}"
         wait: yes
         region: "{{ region }}"
         vpc_subnet_id: "{{ ec2_vpc_subnet1.subnet.id }}"
@@ -106,8 +106,10 @@
           project: "{{ project }}"
         volumes:
           - device_name: /dev/xvda
-            volume_type: gp2
-            volume_size: "{{ boot_disk_sizeGB }}"
+            ebs:
+              volume_type: gp2
+              volume_size: "{{ boot_disk_sizeGB }}"
+              delete_on_termination: yes
         group_id: "{{ ec2_sg.group_id }}"
         user_data: |
           #!/usr/bin/env bash
