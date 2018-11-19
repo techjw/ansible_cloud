@@ -1,0 +1,97 @@
+---
+- name: Deploy Azure Resource Group and network infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    infra_state: present
+    project: lab
+    az_user: jwalton
+    email: jawalton@redhat.com
+    location: eastus
+    vnet_cidr: 10.23.0.0/22
+    vnet_subnets:
+      - cidr: 10.23.0.0/24
+        name: subnet-0
+      - cidr: 10.23.1.0/24
+        name: subnet-1
+      - cidr: 10.23.2.0/24
+        name: subnet-2
+      - cidr: 10.23.3.0/24
+        name: subnet-3
+    # Specify CIDR notation, or * for all IPs (Azure does not support 0.0.0.0/0)
+    remote_access_cidr: *
+  tasks:
+    - name: set-azure-resource-name-facts
+      set_fact:
+        azure_rm_resourcegroup_name: "{{ az_user }}-{{ project }}-group"
+        azure_rm_virtualnetwork_name: "{{ az_user }}-{{ project }}-vnet"
+        azure_rm_securitygroup_public_name: "{{ az_user }}-{{ project }}-public-nsg"
+        azure_rm_routetable_public_name: "{{ az_user }}-{{ project }}-public-rt"
+
+    - name: create-resource-group
+      azure_rm_resourcegroup:
+        name: "{{ azure_rm_resourcegroup_name }}"
+        state: "{{ infra_state }}"
+        location: "{{ location }}"
+        tags:
+          project: "{{ project }}"
+          az_user: "{{ az_user }}"
+          owner_email: "{{ email }}"
+
+    - name: create-virtual-network
+      azure_rm_virtualnetwork:
+        name: "{{ azure_rm_virtualnetwork_name }}"
+        state: "{{ infra_state }}"
+        resource_group: "{{ azure_rm_resourcegroup_name }}"
+        address_prefixes_cidr:
+          - "{{ vnet_cidr }}"
+        tags:
+          project: "{{ project }}"
+          az_user: "{{ az_user }}"
+          owner_email: "{{ email }}"
+
+    - name: create-network-security-group
+      azure_rm_securitygroup:
+        state: "{{ infra_state }}"
+        name: "{{ azure_rm_securitygroup_public_name }}"
+        resource_group: "{{ azure_rm_resourcegroup_name }}"
+        purge_rules: yes
+        rules:
+          - name: AllowInboundSSH
+            access: Allow
+            direction: Inbound
+            priority: 101
+            protocol: Tcp
+            destination_port_range: 22
+            source_address_prefix:
+              - "{{ remote_access_cidr }}"
+        tags:
+          project: "{{ project }}"
+          az_user: "{{ az_user }}"
+          owner_email: "{{ email }}"
+
+    - name: create-public-subnets-route-table
+      azure_rm_routetable:
+        state: "{{ infra_state }}"
+        name: "{{ azure_rm_routetable_public_name }}"
+        resource_group: "{{ azure_rm_resourcegroup_name }}"
+        tags:
+          project: "{{ project }}"
+          az_user: "{{ az_user }}"
+          owner_email: "{{ email }}"
+
+    - name: create-subnets
+      azure_rm_subnet:
+        state: "{{ infra_state }}"
+        name: "{{ az_user }}-{{ project }}-{{ item.name }}"
+        virtual_network_name: "{{ azure_rm_virtualnetwork_name }}"
+        resource_group: "{{ azure_rm_resourcegroup_name }}"
+        address_prefix_cidr: "{{ item.cidr }}"
+        route_table: "{{ azure_rm_routetable_public_name }}"
+        security_group: "{{ azure_rm_securitygroup_public_name }}"
+        tags:
+          project: "{{ project }}"
+          az_user: "{{ az_user }}"
+          owner_email: "{{ email }}"
+      with_items: "{{ vnet_subnets }}"
