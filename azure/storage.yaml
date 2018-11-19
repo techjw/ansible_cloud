@@ -1,0 +1,30 @@
+---
+- name: Deploy Azure storage account and container for virtual disk images
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    storage_state: present
+    project: lab
+    az_user: jwalton
+    email: jawalton@redhat.com
+    location: eastus
+  tasks:
+    - name: set-azure-resource-name-facts
+      set_fact:
+        azure_rm_resourcegroup_name: "{{ az_user }}-{{ project }}-group"
+        azure_rm_storageaccount_name: "{{ az_user }}{{ project }}storage"
+
+    - name: create-storage-account
+      azure_rm_storageaccount:
+        state: "{{ storage_state }}"
+        name: "{{ az_user }}{{ project }}storage"
+        resource_group: "{{ azure_rm_resourcegroup_name }}"
+        kind: StorageV2
+        account_type: Standard_LRS
+
+    - name: create-storage-container
+      azure_rm_storageblob:
+        container: "{{ az_user }}-{{ project }}-disks"
+        resource_group: "{{ azure_rm_resourcegroup_name }}"
+        storage_account_name: "{{ azure_rm_storageaccount_name }}"
