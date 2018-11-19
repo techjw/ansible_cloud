@@ -1,0 +1,107 @@
+---
+- name: Deploy AWS VPC and network infrastructure
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars:
+    infra_state: present
+    project: lab
+    iam_user: jwalton
+    email: jawalton@redhat.com
+    region: us-east-1
+    vpc_cidr: 10.23.0.0/22
+    vpc_subnets:
+      - zone: us-east-1a
+        cidr: 10.23.0.0/24
+        name: subnet-0
+      - zone: us-east-1c
+        cidr: 10.23.1.0/24
+        name: subnet-1
+      - zone: us-east-1d
+        cidr: 10.23.2.0/24
+        name: subnet-2
+      - zone: us-east-1e
+        cidr: 10.23.3.0/24
+        name: subnet-3
+    remote_access_cidr: 0.0.0.0./0
+  tasks:
+    - name: create-vpc
+      register: ec2_vpc
+      ec2_vpc_net:
+        name: "{{ iam_user }}-{{ project }}-vpc"
+        state: "{{ infra_state }}"
+        region: "{{ region }}"
+        cidr_block: "{{ vpc_cidr }}"
+        tags:
+          project: "{{ project }}"
+          iam_user: "{{ iam_user }}"
+          owner_email: "{{ email }}"
+
+    - name: create-internet-gateway
+      register: ec2_igw
+      ec2_vpc_igw:
+        state: "{{ infra_state }}"
+        region: "{{ region }}"
+        vpc_id: "{{ ec2_vpc.vpc.id }}"
+        tags:
+          Name: "{{ iam_user }}-{{ project }}-igw"
+          project: "{{ project }}"
+          iam_user: "{{ iam_user }}"
+          owner_email: "{{ email }}"
+
+    - name: create-subnets
+      register: ec2_vpc_subnets
+      ec2_vpc_subnet:
+        state: "{{ infra_state }}"
+        region: "{{ region }}"
+        vpc_id: "{{ ec2_vpc.vpc.id }}"
+        cidr: "{{ item.cidr }}"
+        az: "{{ item.zone }}"
+        tags:
+          Name: "{{ iam_user }}-{{ project }}-{{ item.name }}"
+          project: "{{ project }}"
+          iam_user: "{{ iam_user }}"
+          owner_email: "{{ email }}"
+      with_items: "{{ vpc_subnets }}"
+
+    - name: set-subnet-id-fact
+      set_fact:
+          ec2_subnet_ids: "{{ ec2_subnet_ids|default([]) + [ item.subnet.id ] }}"
+      with_items: "{{ ec2_vpc_subnets.results }}"
+
+    - name: create-public-subnets-route-table
+      register: ec2_vpc_rt
+      ec2_vpc_route_table:
+        state: "{{ infra_state }}"
+        vpc_id: "{{ ec2_vpc.vpc.id }}"
+        region: "{{ region }}"
+        tags:
+          Name: "{{ iam_user }}-{{ project }}-public-rt"
+          project: "{{ project }}"
+          iam_user: "{{ iam_user }}"
+          owner_email: "{{ email }}"
+        subnets: "{{ ec2_subnet_ids }}"
+        routes:
+          - dest: 0.0.0.0/0
+            gateway_id: "{{ ec2_igw.gateway_id }}"
+
+    - name: create-security-group
+      register: ec2_sg
+      ec2_group:
+        state: "{{ infra_state }}"
+        name: "{{ iam_user }}-{{ project }}-public-sg"
+        description: "{{ project }} public zone security group"
+        vpc_id: "{{ ec2_vpc.vpc.id }}"
+        region: "{{ region }}"
+        tags:
+          Name: "{{ iam_user }}-{{ project }}-public-sg"
+          project: "{{ project }}"
+          iam_user: "{{ iam_user }}"
+          owner_email: "{{ email }}"
+        rules:
+          - proto: -1
+            cidr_ip: "{{ vpc_cidr }}"
+          - proto: tcp
+            from_port: 22
+            to_port: 22
+            cidr_ip: "{{ remote_access_cidr }}"
