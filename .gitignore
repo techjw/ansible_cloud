@@ -1,2 +1,3 @@
 gce/credentials.json
-**/all-in-one.retry
+**/_variables.yaml
+**/*.retry
