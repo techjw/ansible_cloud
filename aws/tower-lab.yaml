@@ -5,15 +5,16 @@
   gather_facts: yes
   vars:
     tower_state: present
-    project: lab
-    iam_user: jwalton
-    email: jawalton@redhat.com
+    project: tower
+    iam_user: iamuser
+    email: user@example.com
     region: us-east-1
-    instance_type: t2.micro
-    boot_image: ami-0456c465f72bd0c95
-    boot_disk_sizeGB: 30
-    db_disk_sizeGB: 20
+    instance_type: t3.large
+    boot_image: ami-123456789abcdef
+    boot_disk_sizeGB: 50
+    # db_disk_sizeGB: 20
     ssh_public_key: /tmp/aws_rsa.pub
+    ansible_tower_version: 3.4.1-1
   tasks:
     - name: gather-subnet-facts
       register: ec2_vpc_subnet
@@ -48,24 +49,25 @@
         vpc_subnet_id: "{{ ec2_vpc_subnet.subnets[0].subnet_id }}"
         network:
           assign_public_ip: yes
-        key_name: "{{ tower_keypair }}"
+        key_name: "{{ tower_keypair.key.name }}"
         tags:
-          Name: "{{ project }}-instance-1"
+          Name: "{{ iam_user }}-{{ project }}-tower-1"
           project: "{{ project }}"
         volumes:
-          - device_name: /dev/xvda
+          - device_name: /dev/sda1
             ebs:
               volume_type: gp2
               volume_size: "{{ boot_disk_sizeGB }}"
               delete_on_termination: yes
-          - device_name: /dev/xvdb
-            ebs:
-              volume_type: gp2
-              volume_size: "{{ db_disk_sizeGB }}"
-              delete_on_termination: yes
+          # - device_name: /dev/xvda
+          #   ebs:
+          #     volume_type: gp2
+          #     volume_size: "{{ db_disk_sizeGB }}"
+          #     delete_on_termination: yes
         security_groups:
           - "{{ ec2_secgroups.security_groups[0].group_id }}"
-        # user_data: |
-        #   #!/usr/bin/env bash
-        #   yum update -y -q
-        #   yum install -y -q ansible
+        user_data: |
+          #!/usr/bin/env bash
+          yum update -y -q
+          curl -L https://releases.ansible.com/ansible-tower/setup/ansible-tower-setup-{{ ansible_tower_version }}.tar.gz \
+            -o /tmp/ansible-tower-setup-{{ ansible_tower_version }}.tar.gz
